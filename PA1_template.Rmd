@@ -1,25 +1,136 @@
----
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
----
+Reproducible Research. Course Project 1
+=======================================
+
+The following report answers questions related to data from a personal activity monitoring device.
+The original dataset can also be found in the same GitHub repository.
+
+### Loading the data
+
+```{r}
+activity <- read.csv("activity.csv")
+```
+
+### What is the mean total number of steps taken per day?
+
+The total number of steps taken by the subject, per day, is:
+```{r}
+stepsperday <- with(activity, tapply(steps, date, sum))
+stepsperday
+```
+
+A histogram of the total number of steps taken each day can be found below. It uses the averaged
+data that has been computed in the call to *tapply* in the previous chunk. Since there are missing
+values in the dataset, the call to *ggplot* produces a warning.
+```{r}
+steps <- data.frame(steps = stepsperday, date = names(stepsperday))
+library(ggplot2)
+ggplot(steps, aes(x = date, y = steps)) +
+    geom_histogram(stat = "identity", fill = "steelblue") +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+    xlab("Date") +
+    ylab("Total number of steps") +
+    ggtitle("Total Number of Steps Per Day")
+```
+
+The mean and median of the total number of steps taken per day are:
+```{r}
+mean(steps$steps, na.rm = TRUE)
+median(steps$steps, na.rm = TRUE)
+```
+
+### What is the average daily activity pattern?
+
+The following code chunk produces a times series plot of the 5-minute interval (x-axis) 
+and the average number of steps taken, averaged across all days (y-axis). Mean step values have been
+computed in the call to *tapply*, and the *interval* variable has been converted to factor so as to
+preserve the order of its values in the plot.
+```{r}
+stepsperinterval <- with(activity, tapply(steps, interval, mean, na.rm = TRUE))
+stepsint <- data.frame(steps = stepsperinterval, interval = names(stepsperinterval))
+stepsint$interval <- factor(stepsint$interval, levels=unique(stepsint$interval)) 
+
+plot(stepsint$interval, stepsint$steps, xlab = "Interval", ylab = "Average number of steps",
+     main = "Average Number of Steps Taken on Each 5-minute Interval")
+points(stepsint$interval, stepsint$steps, type = "l")
+```
+
+```{r}
+max(stepsperinterval)
+```
+On average across all the days in the dataset, the maximum number of steps was taken in the 915
+interval: 206 steps. This interval roughly corresponds to 3.30pm.
+
+### Imputing missing values
+
+```{r}
+sum(complete.cases(activity))
+sum(is.na(activity$steps))
+```
+15264 cases are complete, meaning that there are 2304 rows with NA values. We can also see that
+all of these missing values are in the *steps* variable.
+
+I have imputed the missing values based on the mean for each 5-minute interval (calculated above) and created a new dataset, equal to the original one but with the NAs filled in. Following is the corresponding code:
+```{r}
+activity_full <- data.frame(steps = activity$steps,
+                            date = activity$date,
+                            interval = activity$interval,
+                            steps_intavg = rep(stepsint$steps, 61))
+
+activity_imputed <- transform(activity_full, steps = ifelse(is.na(steps), steps_intavg, steps))
+```
+
+Below is a histogram of the total number of steps taken each day, using the dataset with imputed values. The chunk also includes the necessary code for computing the total number of steps per day.
+```{r}
+stepsperday_imputed <- with(activity_imputed, tapply(steps, date, sum))
+steps_imputed <- data.frame(steps = stepsperday_imputed, 
+                            date = names(stepsperday_imputed))
+
+ggplot(steps_imputed, aes(x = date, y = steps)) +
+    geom_histogram(stat = "identity", fill = "steelblue") +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+    xlab("Date") +
+    ylab("Total number of steps") +
+    ggtitle("Total Number of Steps Per Day (based on imputed data)")
+```
+
+Mean and median total number of steps taken per day:
+```{r}
+mean(steps_imputed$steps)
+median(steps_imputed$steps)
+```
+We can see how imputing missing data did not produce any significant changes in the estimates of the total number of steps taken each day. The mean is identical to that in the original data, while in the median there is only a difference of about one step per day. This was to be expected, since the imputed values have themselves been calculated based on the mean for each 5-minute interval, therefore not producing any deviation.
+
+### Are there differences in activity patterns between weekdays and weekends?
+
+The following code chunk created a new factor variable indicating whether a given date is a weekday or a weekend day.
+```{r}
+activity_imputed$date <- as.POSIXct(strptime(activity_imputed$date, format = "%Y-%m-%d"))
+activity_imputed$day <- weekdays(activity_imputed$date, abbreviate = TRUE)
+library(dplyr)
+activity_imputed <- mutate(activity_imputed, daytype = ifelse(day %in% c("Mon", "Tue", "Wed", "Thu", "Fri"),
+                                   "weekday", "weekend"))
+```
+
+Then step averages have been calculated, by 5-minute interval, separately for weekdays and weekend days,
+then merged again in one dataset.
+```{r}
+week <- subset(activity_imputed, daytype == "weekday")
+week_intavg <- with(week, tapply(steps, interval, mean))
+week$steps_intavg_bydaytype <- rep(week_intavg, 45)
 
 
-## Loading and preprocessing the data
+weekend <- subset(activity_imputed, daytype == "weekend")
+weekend_intavg <- with(weekend, tapply(steps, interval, mean))
+weekend$steps_intavg_bydaytype <- rep(weekend_intavg, 16)
 
+activity_bydaytype <- rbind(week, weekend)
+```
 
+Below is a panel, time series plot of the 5-minute interval and the average number of steps taken, averaged across all weekdays or weekend days.
+```{r}
+library(lattice)
+xyplot(steps_intavg_bydaytype ~ interval | daytype, activity_bydaytype, 
+       type = "l", layout = c(1, 2), xlab = "Interval", ylab = "Average number of steps",
+       main = "Average Number of Steps Taken on Weekdays vs. Weekend Days")
+```
 
-## What is mean total number of steps taken per day?
-
-
-
-## What is the average daily activity pattern?
-
-
-
-## Imputing missing values
-
-
-
-## Are there differences in activity patterns between weekdays and weekends?
